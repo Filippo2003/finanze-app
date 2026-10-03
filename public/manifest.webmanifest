@@ -1,0 +1,11 @@
+{
+  "name": "Finanze",
+  "short_name": "Finanze",
+  "description": "Gestione personale delle finanze, locale e privata.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "lang": "it-IT",
+  "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}
