@@ -9,10 +9,32 @@ type CloudRecord = { kind: CloudKind; id: string; data: Record<string, unknown>;
 let timer: ReturnType<typeof setTimeout> | undefined;
 const notify = (status: SyncStatus) => window.dispatchEvent(new CustomEvent("finanze-sync-status", { detail: status }));
 
+function accessTokenFrom(value: string) {
+  const trimmed = value.trim();
+  if (/^[a-f0-9]{64}$/i.test(trimmed)) return trimmed;
+  try {
+    const url = new URL(trimmed, window.location.origin);
+    const token = new URLSearchParams(url.hash.replace(/^#/, "")).get("access");
+    return token && /^[a-f0-9]{64}$/i.test(token) ? token : null;
+  } catch { return null; }
+}
+
+export async function activateCloudAccess(value: string) {
+  const token = accessTokenFrom(value);
+  if (!token) throw new Error("Link segreto non valido");
+  await db.settings.put({ key: "cloudAccessToken", value: token });
+  return token;
+}
+
+export async function personalCloudLink() {
+  const token = (await db.settings.get("cloudAccessToken"))?.value;
+  return token ? `${window.location.origin}/#access=${token}` : null;
+}
+
 async function tokenFromLink() {
   const match = window.location.hash.match(/(?:^#|&)access=([a-f0-9]{64})/i);
   if (match) {
-    await db.settings.put({ key: "cloudAccessToken", value: match[1] });
+    await activateCloudAccess(match[1]);
     history.replaceState(null, "", `${location.pathname}${location.search}`);
     return match[1];
   }
