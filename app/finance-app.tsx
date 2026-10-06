@@ -36,7 +36,12 @@ export function FinanceApp() {
     const onOnline = () => void syncNow();
     window.addEventListener("finanze-sync-status", onStatus);
     window.addEventListener("online", onOnline);
-    void (async () => { setSyncStatus(await syncNow()); await ensureDefaults(); setPrivacy((await db.settings.get("privacyMode"))?.value === "true"); setReady(true); })();
+    void (async () => {
+      await ensureDefaults();
+      setPrivacy((await db.settings.get("privacyMode"))?.value === "true");
+      setReady(true);
+      setSyncStatus(await syncNow());
+    })();
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" }).then((registration) => registration.update()).catch(() => undefined);
     return () => { window.removeEventListener("finanze-sync-status", onStatus); window.removeEventListener("online", onOnline); };
   }, []);
