@@ -1,5 +1,5 @@
-const CACHE = "finanze-v9";
-const SHELL = ["/", "/manifest.webmanifest", "/favicon.svg", "/sql-wasm.wasm", "/initial-backup.fnc"];
+const CACHE = "finanze-v10";
+const SHELL = ["/", "/manifest.webmanifest", "/favicon.svg"];
 
 self.addEventListener("install", event => {
   self.skipWaiting();
@@ -10,8 +10,6 @@ self.addEventListener("activate", event => event.waitUntil((async () => {
   const keys = await caches.keys();
   await Promise.all(keys.filter(key => key !== CACHE).map(key => caches.delete(key)));
   await self.clients.claim();
-  const windows = await self.clients.matchAll({ type: "window" });
-  await Promise.all(windows.map(client => client.navigate(client.url)));
 })()));
 
 self.addEventListener("fetch", event => {
