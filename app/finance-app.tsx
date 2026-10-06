@@ -29,7 +29,6 @@ export function FinanceApp() {
   const [addOpen, setAddOpen] = useState(false);
   const [editing, setEditing] = useState<FinanceTransaction | null>(null);
   const [privacy, setPrivacy] = useState(false);
-  const [ready, setReady] = useState(false);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>("syncing");
   useEffect(() => {
     const onStatus = (event: Event) => setSyncStatus((event as CustomEvent<SyncStatus>).detail);
@@ -37,10 +36,13 @@ export function FinanceApp() {
     window.addEventListener("finanze-sync-status", onStatus);
     window.addEventListener("online", onOnline);
     void (async () => {
-      await ensureDefaults();
-      setPrivacy((await db.settings.get("privacyMode"))?.value === "true");
-      setReady(true);
-      setSyncStatus(await syncNow());
+      try {
+        await ensureDefaults();
+        setPrivacy((await db.settings.get("privacyMode"))?.value === "true");
+      } catch {
+        setSyncStatus("error");
+      }
+      window.setTimeout(() => void syncNow().then(setSyncStatus), 300);
     })();
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" }).then((registration) => registration.update()).catch(() => undefined);
     return () => { window.removeEventListener("finanze-sync-status", onStatus); window.removeEventListener("online", onOnline); };
@@ -69,7 +71,6 @@ export function FinanceApp() {
   const accounts = useLiveQuery(() => db.accounts.toArray(), [], []) || [];
   const budgets = useLiveQuery(() => db.budgets.toArray(), [], []) || [];
   const togglePrivacy = async () => { const next = !privacy; setPrivacy(next); await db.settings.put({ key: "privacyMode", value: String(next) }); };
-  if (!ready) return <div className="app-loading"><span className="brand-mark"><WalletCards /></span><p>Finanze</p></div>;
   return <div className="app-shell"><main className="main-content">
     {view === "home" && <Dashboard transactions={transactions} categories={categories} budgets={budgets} privacy={privacy} onTogglePrivacy={togglePrivacy} onOpenTransaction={setEditing} />}
     {view === "transactions" && <Transactions transactions={transactions} categories={categories} accounts={accounts} privacy={privacy} onOpen={setEditing} />}
@@ -111,10 +112,11 @@ function Dashboard({ transactions, categories, budgets, privacy, onTogglePrivacy
 }
 
 function Transactions({ transactions, categories, accounts, privacy, onOpen }: { transactions: FinanceTransaction[]; categories: Category[]; accounts: {id:string;name:string}[]; privacy: boolean; onOpen: (t: FinanceTransaction) => void }) {
-  const [query, setQuery] = useState(""); const [type, setType] = useState<"all" | TransactionType>("all"); const categoryMap = new Map(categories.map((c) => [c.id, c])); const accountMap = new Map(accounts.map((a) => [a.id, a.name]));
+  const [query, setQuery] = useState(""); const [type, setType] = useState<"all" | TransactionType>("all"); const [visibleCount, setVisibleCount] = useState(60); const categoryMap = new Map(categories.map((c) => [c.id, c])); const accountMap = new Map(accounts.map((a) => [a.id, a.name]));
   const filtered = transactions.filter((t) => !t.deletedAt).filter((t) => type === "all" || t.type === type).filter((t) => `${t.description} ${t.notes} ${categoryMap.get(t.categoryId)?.name} ${(t.amountCents / 100).toFixed(2)}`.toLowerCase().includes(query.toLowerCase()));
-  const grouped = filtered.reduce<Record<string, FinanceTransaction[]>>((a, t) => { (a[t.date] ||= []).push(t); return a; }, {});
-  return <><header className="topbar"><div><p className="eyebrow">ARCHIVIO</p><h1>Movimenti</h1></div><ListFilter className="muted-icon" /></header><div className="search-box"><Search /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Cerca descrizione, categoria o importo" aria-label="Cerca movimenti" />{query && <button onClick={() => setQuery("")}><X /></button>}</div><div className="segmented"><button className={type === "all" ? "active" : ""} onClick={() => setType("all")}>Tutti</button><button className={type === "expense" ? "active" : ""} onClick={() => setType("expense")}>Spese</button><button className={type === "income" ? "active" : ""} onClick={() => setType("income")}>Entrate</button></div><div className="grouped-list">{Object.entries(grouped).map(([date, items]) => <section key={date}><div className="date-label"><span>{date === today() ? "Oggi" : shortDate(date)}</span><b>{eur(totals(items).net, privacy)}</b></div><TransactionList items={items} categories={categoryMap} privacy={privacy} accounts={accountMap} onOpen={onOpen} /></section>)}</div>{!filtered.length && <EmptyState text={query ? "Nessun movimento corrisponde alla ricerca." : "Non ci sono ancora movimenti."} />}</>;
+  const grouped = filtered.slice(0, visibleCount).reduce<Record<string, FinanceTransaction[]>>((a, t) => { (a[t.date] ||= []).push(t); return a; }, {});
+  const changeType = (next: "all" | TransactionType) => { setType(next); setVisibleCount(60); };
+  return <><header className="topbar"><div><p className="eyebrow">ARCHIVIO</p><h1>Movimenti</h1></div><ListFilter className="muted-icon" /></header><div className="search-box"><Search /><input value={query} onChange={(e) => { setQuery(e.target.value); setVisibleCount(60); }} placeholder="Cerca descrizione, categoria o importo" aria-label="Cerca movimenti" />{query && <button onClick={() => setQuery("")}><X /></button>}</div><div className="segmented"><button className={type === "all" ? "active" : ""} onClick={() => changeType("all")}>Tutti</button><button className={type === "expense" ? "active" : ""} onClick={() => changeType("expense")}>Spese</button><button className={type === "income" ? "active" : ""} onClick={() => changeType("income")}>Entrate</button></div><div className="grouped-list">{Object.entries(grouped).map(([date, items]) => <section key={date}><div className="date-label"><span>{date === today() ? "Oggi" : shortDate(date)}</span><b>{eur(totals(items).net, privacy)}</b></div><TransactionList items={items} categories={categoryMap} privacy={privacy} accounts={accountMap} onOpen={onOpen} /></section>)}</div>{visibleCount < filtered.length && <button className="load-more" onClick={() => setVisibleCount((count) => count + 60)}>Mostra altri movimenti</button>}{!filtered.length && <EmptyState text={query ? "Nessun movimento corrisponde alla ricerca." : "Non ci sono ancora movimenti."} />}</>;
 }
 
 function TransactionList({ items, categories, accounts, privacy, onOpen }: { items: FinanceTransaction[]; categories: Map<string, Category>; accounts?: Map<string, string>; privacy: boolean; onOpen: (t: FinanceTransaction) => void }) {
