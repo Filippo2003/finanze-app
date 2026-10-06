@@ -84,7 +84,7 @@ export function FinanceApp() {
   </nav><TransactionDialog open={addOpen || Boolean(editing)} transaction={editing} categories={categories} accounts={accounts} onClose={() => { setAddOpen(false); setEditing(null); }} /><Toaster position="top-center" richColors /></div>;
 }
 
-function NavButton({ active, label, onClick, children }: { active: boolean; label: string; onClick: () => void; children: React.ReactNode }) { return <button className={active ? "nav-item active" : "nav-item"} onClick={onClick}>{children}<span>{label}</span></button>; }
+function NavButton({ active, label, onClick, children }: { active: boolean; label: string; onClick: () => void; children: React.ReactNode }) { return <button type="button" className={active ? "nav-item active" : "nav-item"} aria-current={active ? "page" : undefined} onClick={onClick}>{children}<span>{label}</span></button>; }
 
 function ActivityRings({ expense, income, budget }: { expense: number; income: number; budget?: Budget }) {
   const expenseProgress = budget ? Math.min(1, expense / budget.limitCents) : Math.min(1, expense / 150000);
