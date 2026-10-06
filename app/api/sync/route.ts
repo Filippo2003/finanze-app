@@ -27,10 +27,12 @@ export async function POST(request: Request) {
     return Response.json({ ok: true });
   }
   const records = Array.isArray(body.records) ? body.records.slice(0, 10000) : [];
-  for (const record of records) {
-    if (!record?.kind || !record?.id || !record?.data || !record?.updatedAt) continue;
+  const validRecords = records.filter((record) => record?.kind && record?.id && record?.data && record?.updatedAt);
+  if (validRecords.length) {
+    const payload = JSON.stringify(validRecords);
     await sql`INSERT INTO finance_records (kind, record_id, data, updated_at)
-      VALUES (${record.kind}, ${record.id}, ${JSON.stringify(record.data)}::jsonb, ${record.updatedAt}::timestamptz)
+      SELECT item->>'kind', item->>'id', item->'data', (item->>'updatedAt')::timestamptz
+      FROM jsonb_array_elements(${payload}::jsonb) AS item
       ON CONFLICT (kind, record_id) DO UPDATE SET data = EXCLUDED.data, updated_at = EXCLUDED.updated_at
       WHERE finance_records.updated_at < EXCLUDED.updated_at`;
   }
