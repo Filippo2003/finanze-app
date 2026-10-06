@@ -3,12 +3,6 @@ import { neon } from "@neondatabase/serverless";
 export const dynamic = "force-dynamic";
 type CloudRecord = { kind: string; id: string; data: Record<string, unknown>; updatedAt: string };
 
-function authorized(request: Request) {
-  const expected = process.env.APP_ACCESS_TOKEN;
-  const supplied = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
-  return Boolean(expected && supplied && supplied.length === expected.length && supplied === expected);
-}
-
 async function database() {
   const url = process.env.DATABASE_URL;
   if (!url) return null;
@@ -24,7 +18,6 @@ async function database() {
 }
 
 export async function POST(request: Request) {
-  if (!authorized(request)) return Response.json({ error: "unauthorized" }, { status: 401 });
   const sql = await database();
   if (!sql) return Response.json({ error: "cloud_not_configured" }, { status: 503 });
   let body: { operation?: string; records?: CloudRecord[] };
@@ -44,4 +37,3 @@ export async function POST(request: Request) {
   const result = await sql`SELECT kind, record_id, data, updated_at FROM finance_records ORDER BY kind, record_id`;
   return Response.json({ records: result.map((row) => ({ kind: row.kind, id: row.record_id, data: row.data, updatedAt: new Date(String(row.updated_at)).toISOString() })) });
 }
-
