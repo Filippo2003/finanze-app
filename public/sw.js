@@ -1,4 +1,4 @@
-const CACHE = "finanze-v7";
+const CACHE = "finanze-v8";
 const SHELL = ["/", "/manifest.webmanifest", "/favicon.svg", "/sql-wasm.wasm", "/initial-backup.fnc"];
 
 self.addEventListener("install", event => {
