@@ -1,4 +1,4 @@
-const CACHE = "finanze-v13";
+const CACHE = "finanze-v14";
 const SHELL = ["/", "/manifest.webmanifest", "/favicon.svg"];
 
 self.addEventListener("install", event => {

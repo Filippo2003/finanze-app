@@ -2,6 +2,7 @@
 
 import JSZip from "jszip";
 import initSqlJs from "sql.js";
+import { newId } from "./finance";
 import type { Account, Category, FinanceTransaction, RecurringTransaction } from "./models";
 
 export interface LegacyPreview {
@@ -51,7 +52,7 @@ export async function parseMmBackup(file: File): Promise<LegacyPreview> {
   const SQL = await initSqlJs({ locateFile: () => "/sql-wasm.wasm" });
   const legacy = new SQL.Database(await dbFile.async("uint8array"));
   try {
-    const batchId = crypto.randomUUID();
+    const batchId = newId();
     const now = new Date().toISOString();
     const categoryRows = rows(legacy, "SELECT uid,title,type,icon,color,isRemoved,isArchived,position,created,modified FROM category");
     const categories: Category[] = categoryRows.map((r) => ({
