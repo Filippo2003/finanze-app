@@ -7,6 +7,8 @@ type CloudKind = "transaction" | "category" | "account" | "budget" | "recurring"
 type CloudRecord = { kind: CloudKind; id: string; data: Record<string, unknown>; updatedAt: string };
 
 let timer: ReturnType<typeof setTimeout> | undefined;
+let syncInFlight: Promise<SyncStatus> | undefined;
+let resyncRequested = false;
 const notify = (status: SyncStatus) => window.dispatchEvent(new CustomEvent("finanze-sync-status", { detail: status }));
 
 const recordDate = (data: Record<string, unknown>) => String(data.updatedAt || data.createdAt || "1970-01-01T00:00:00.000Z");
@@ -35,14 +37,17 @@ async function applyRemote(records: CloudRecord[]) {
   });
 }
 
-export async function syncNow(): Promise<SyncStatus> {
+async function performSync(): Promise<SyncStatus> {
   if (!navigator.onLine) { notify("offline"); return "offline"; }
   notify("syncing");
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 15000);
   try {
     const hasRealData = (await db.transactions.count()) > 0;
     const response = await fetch("/api/sync", {
       method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ operation: "sync", records: hasRealData ? await localRecords() : [] }),
+      signal: controller.signal,
     });
     if (response.status === 503) { notify("not-configured"); return "not-configured"; }
     if (!response.ok) throw new Error("sync rejected");
@@ -50,7 +55,28 @@ export async function syncNow(): Promise<SyncStatus> {
     await applyRemote(payload.records || []);
     await db.settings.put({ key: "lastCloudSync", value: new Date().toISOString() });
     notify("synced"); return "synced";
-  } catch { notify("error"); return "error"; }
+  } catch {
+    const status: SyncStatus = !navigator.onLine ? "offline" : "error";
+    notify(status);
+    return status;
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
+export function syncNow(): Promise<SyncStatus> {
+  if (syncInFlight) {
+    resyncRequested = true;
+    return syncInFlight;
+  }
+  syncInFlight = performSync().finally(() => {
+    syncInFlight = undefined;
+    if (resyncRequested) {
+      resyncRequested = false;
+      queueCloudSync(50);
+    }
+  });
+  return syncInFlight;
 }
 
 export function queueCloudSync(delay = 350) {
