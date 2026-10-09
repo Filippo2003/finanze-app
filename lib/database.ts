@@ -52,6 +52,42 @@ export async function ensureDefaults() {
   ]);
 }
 
+export async function deduplicateCategories() {
+  if ((await db.settings.get("categoryDedupVersion"))?.value === "v2") return 0;
+  const categories = await db.categories.toArray();
+  const transactions = await db.transactions.toArray();
+  const usage = new Map<string, number>();
+  for (const transaction of transactions) usage.set(transaction.categoryId, (usage.get(transaction.categoryId) || 0) + 1);
+  const groups = new Map<string, Category[]>();
+  for (const category of categories) {
+    if (category.archived) continue;
+    const key = `${category.type}:${category.name.trim().toLocaleLowerCase("it-IT")}`;
+    groups.set(key, [...(groups.get(key) || []), category]);
+  }
+  const replacements = new Map<string, string>();
+  const archived: Category[] = [];
+  const timestamp = now();
+  for (const group of groups.values()) {
+    if (group.length < 2) continue;
+    const sorted = [...group].sort((a, b) => (usage.get(b.id) || 0) - (usage.get(a.id) || 0));
+    const keep = sorted[0];
+    for (const duplicate of sorted.slice(1)) {
+      replacements.set(duplicate.id, keep.id);
+      archived.push({ ...duplicate, archived: true, updatedAt: timestamp });
+    }
+  }
+  const migrated = transactions.flatMap((transaction) => {
+    const categoryId = replacements.get(transaction.categoryId);
+    return categoryId ? [{ ...transaction, categoryId, updatedAt: timestamp }] : [];
+  });
+  await db.transaction("rw", [db.transactions, db.categories, db.settings], async () => {
+    if (migrated.length) await db.transactions.bulkPut(migrated);
+    if (archived.length) await db.categories.bulkPut(archived);
+    await db.settings.put({ key: "categoryDedupVersion", value: "v2" });
+  });
+  return migrated.length + archived.length;
+}
+
 export async function clearAllData() {
   await db.transaction("rw", db.tables, async () => Promise.all(db.tables.map((table) => table.clear())));
 }
